@@ -53,6 +53,7 @@ fn handle_preprocessing(pre: &dyn Preprocessor) -> Result<(), Error> {
     let processed_book = pre.run(&ctx, book)?;
     serde_json::to_writer(io::stdout(), &processed_book)?;
 
+
     Ok(())
 }
 

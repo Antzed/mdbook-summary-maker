@@ -6,6 +6,12 @@ use std::fs::File;
 use std::io::Write;
 use std::fs;
 
+use mdbook::MDBook;
+
+
+const SUMMARY_FILE: &str = "SUMMARY.md";
+
+
 pub struct SummaryMaker;
 
 impl SummaryMaker {
@@ -24,22 +30,42 @@ impl SummaryMaker {
         let mut summary_path = src_path.clone();
         summary_path.push("SUMMARY.md");
 
+
+        // if there is a SUMMARY.md file, delete it
         if summary_path.exists() {
-            fs::remove_file(&summary_path)?;
+            std::fs::remove_file(summary_path.clone()).unwrap();
         }
 
-        // create a new SUMMARY.md file in the src folder
+        // create a new SUMMARY.md file
+        let summary_file = std::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create(true)
+        .truncate(true)
+        .open(src_path.clone().join(SUMMARY_FILE))
+        .unwrap();
+        // write the SUMMARY.md file
 
-        let mut file = File::create(&summary_path)?;
+        let mut buff = String::new();
+        buff.push_str("# Summary\n\n");
 
-        // write the header
+        // write buff to file
 
-        write!(file, "# Summary\n\n")?;
 
+        let mut file = File::create(summary_path)?;
+        file.write_all(buff.as_bytes())?;
         // Walk the directory tree and generate the summary recursively
-        walk_directory_tree(&src_path, &mut file, 0)?;
+        walk_directory_tree(&src_path, &src_path, &mut file, 0)?;
 
-        Ok(())
+        match MDBook::load(&ctx.root) {
+            Ok(mdbook) => {
+                return Ok(());
+            }
+            Err(e) => {
+                panic!("{}", e);
+            }
+        };
+
     }
 
     
@@ -71,7 +97,7 @@ impl Preprocessor for SummaryMaker {
     }
 }
 
-fn walk_directory_tree(path: &PathBuf, file: &mut File, depth: usize) -> Result<(), Error> {
+fn walk_directory_tree(path: &PathBuf, src_path: &PathBuf, file: &mut File, depth: usize) -> Result<(), Error> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let entry_path = entry.path();
@@ -88,28 +114,25 @@ fn walk_directory_tree(path: &PathBuf, file: &mut File, depth: usize) -> Result<
         if metadata.is_dir() {
             let readme_path = entry_path.join("README.md");
             if readme_path.exists() {
-                let link_path = readme_path.strip_prefix(path)?;
+                let link_path = readme_path.strip_prefix(src_path)?;
                 let link_path_str = link_path.to_str().ok_or_else(|| {
                     Error::msg(format!("Invalid path: {}", link_path.display()))
                 })?;
-                write!(file, "{}- [{}]({})\n", indent, file_name, link_path_str)?;
+                write!(file, "{}- [{}](./{})\n", indent, file_name, link_path_str)?;
             } else {
                 write!(file, "{}- {}\n", indent, file_name)?;
             }
 
-            let mut subdir_path = path.clone();
-            subdir_path.push(entry_name);
-
-            walk_directory_tree(&subdir_path, file, depth + 1)?;
-        } else if file_name.ends_with(".md") && file_name != "README.md" {
-            let link_path = entry_path.strip_prefix(path)?;
+            walk_directory_tree(&entry_path, src_path, file, depth + 1)?;
+        } else if file_name.ends_with(".md")  { //&& file_name != "README.md"
+            let link_path = entry_path.strip_prefix(src_path)?;
             let link_path_str = link_path.to_str().ok_or_else(|| {
                 Error::msg(format!("Invalid path: {}", link_path.display()))
             })?;
 
             write!(
                 file,
-                "{}- [{}]({})\n",
+                "{}- [{}](./{})\n",
                 indent,
                 file_name.trim_end_matches(".md"),
                 link_path_str
